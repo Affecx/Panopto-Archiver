@@ -4,8 +4,9 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import os from "node:os";
 import { pathToFileURL } from "node:url";
-import ffmpeg from "@ffmpeg-installer/ffmpeg";
-import { renderLearningPage } from "../../obsidian-plugin/src/learning";
+import { renderLearningPage } from "../src/learning";
+const ffmpeg = process.env.FFMPEG_PATH || "ffmpeg";
+
 test("interactive learning page uses actual local media, original excerpts and persistent exercises", async () => {
   const folder = await mkdtemp(path.join(os.tmpdir(), "lecture-page-browser-"));
   const browser = await chromium.launch();
@@ -13,7 +14,7 @@ test("interactive learning page uses actual local media, original excerpts and p
     await mkdir(path.join(folder, "learning/frames"), { recursive: true });
     await mkdir(path.join(folder, "media"));
     const video = path.join(folder, "media/fixture.mp4");
-    const result = spawnSync(ffmpeg.path, [
+    const result = spawnSync(ffmpeg, [
       "-v",
       "error",
       "-f",
@@ -34,19 +35,15 @@ test("interactive learning page uses actual local media, original excerpts and p
       "aac",
       video,
     ]);
-    expect(result.status).toBe(0);
+    expect(
+      result.status,
+      result.error?.message || result.stderr?.toString(),
+    ).toBe(0);
     const originalVideo = await readFile(video);
     const image = path.join(folder, "learning/frames/fixture.jpg");
     expect(
-      spawnSync(ffmpeg.path, [
-        "-v",
-        "error",
-        "-i",
-        video,
-        "-frames:v",
-        "1",
-        image,
-      ]).status,
+      spawnSync(ffmpeg, ["-v", "error", "-i", video, "-frames:v", "1", image])
+        .status,
     ).toBe(0);
     const evidence = [
       {

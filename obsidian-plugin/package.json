@@ -6,19 +6,21 @@
   "scripts": {
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:all": "npm run typecheck && npm test && npm run build",
+    "test": "vitest run --dir tests",
+    "test:all": "npm run typecheck && npm test && npm run build && npm run test:e2e",
     "test:local": "node scripts/live-local.mjs",
     "test:codex": "node scripts/live-codex.mjs",
     "package": "npm run build && python3 scripts/package.py",
     "benchmark": "node scripts/compare.mjs",
-    "learning:page": "node scripts/learning-page.mjs"
+    "learning:page": "node scripts/learning-page.mjs",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
     "obsidian": "latest",
     "esbuild": "latest",
     "typescript": "latest",
     "@types/node": "latest",
-    "vitest": "latest"
+    "vitest": "latest",
+    "@playwright/test": "^1.64.1"
   }
 }

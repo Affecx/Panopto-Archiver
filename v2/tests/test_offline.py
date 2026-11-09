@@ -1,15 +1,13 @@
-"""Dependency-free component checks, usable even while PyPI is unavailable."""
-import asyncio
+"""Offline component checks and generated-media decoding."""
 import json
-import os
-from pathlib import Path
 import subprocess
 import tempfile
 import unittest
 import zipfile
+import pytest
 from panopto_archiver.models import Resource, classify, safe_url, filename
 from panopto_archiver.captions import parse, srt
-from panopto_archiver.hls import playlist, assemble
+from panopto_archiver.hls import playlist
 from panopto_archiver.exporter import export_archive
 
 
@@ -68,30 +66,40 @@ class ExportTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn('private',manifest)
                 self.assertNotIn('signature',manifest)
 
-    async def test_real_generated_video_assembly_and_remux(self):
-        ffmpeg, ffprobe, media = os.environ.get('FFMPEG_PATH'), os.environ.get('FFPROBE_PATH'), os.environ.get('V2_TEST_MEDIA')
-        if not all([ffmpeg, ffprobe, media]):
-            self.skipTest('Optional generated-media tools not configured')
-        class Files:
-            async def text(self, url, limit=0):
-                return (Path(media)/url.rsplit('/',1)[-1]).read_text()
-            async def chunks(self, url):
-                with (Path(media)/url.rsplit('/',1)[-1]).open('rb') as handle:
-                    while True:
-                        chunk=handle.read(4096)
-                        if not chunk:break
-                        yield chunk
-        with tempfile.TemporaryDirectory() as directory:
-            resource=Resource('video','hls','observed response',url='https://example.com/video.m3u8')
-            root, report=await export_archive('Video',[resource],Files(),directory,ffmpeg=ffmpeg,progress=lambda _:None)
-            self.assertFalse(report['partial'])
-            video=next(root.rglob('*.mp4'))
-            probe=subprocess.run([ffprobe,'-v','error','-show_format','-show_streams','-of','json',str(video)],capture_output=True,text=True,check=True)
-            info=json.loads(probe.stdout)
-            self.assertGreater(float(info['format']['duration']),3.9)
-            self.assertEqual({s['codec_type'] for s in info['streams']},{'audio','video'})
-            decoded=subprocess.run([ffmpeg,'-v','error','-i',str(video),'-f','null','-'],capture_output=True)
-            self.assertEqual(decoded.returncode,0,decoded.stderr)
+async def test_real_generated_video_assembly_and_remux(av_tools, hls_media, tmp_path):
+    ffmpeg, ffprobe = av_tools
+    if hls_media is None:
+        pytest.skip('FFmpeg and FFprobe are required for video decode validation')
+
+    class Files:
+        async def text(self, url, limit=0):
+            return (hls_media / url.rsplit('/', 1)[-1]).read_text()
+
+        async def chunks(self, url):
+            with (hls_media / url.rsplit('/', 1)[-1]).open('rb') as handle:
+                while True:
+                    chunk = handle.read(4096)
+                    if not chunk:
+                        break
+                    yield chunk
+
+    resource = Resource('video', 'hls', 'observed response', url='https://example.com/video.m3u8')
+    root, report = await export_archive(
+        'Video', [resource], Files(), tmp_path, ffmpeg=ffmpeg, progress=lambda _: None,
+    )
+    assert not report['partial']
+    video = next(root.rglob('*.mp4'))
+    probe = subprocess.run(
+        [ffprobe, '-v', 'error', '-show_format', '-show_streams', '-of', 'json', str(video)],
+        capture_output=True, text=True, check=True,
+    )
+    info = json.loads(probe.stdout)
+    assert float(info['format']['duration']) > 3.9
+    assert {stream['codec_type'] for stream in info['streams']} == {'audio', 'video'}
+    decoded = subprocess.run(
+        [ffmpeg, '-v', 'error', '-i', str(video), '-f', 'null', '-'], capture_output=True,
+    )
+    assert decoded.returncode == 0, decoded.stderr
 
 
 if __name__ == '__main__':

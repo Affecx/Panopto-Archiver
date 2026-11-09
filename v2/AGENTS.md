@@ -1,6 +1,6 @@
 # V2 Python application
 
-The user explicitly requested a complete technology-stack rework. V2 uses Python 3.9+, Playwright, Beautiful Soup and HTTPX; the root TypeScript conventions continue to apply to v1 only. Keep browser discovery, caption conversion, transport and export separate. Run `.venv/bin/python -m pytest -q` from v2 for v2 changes, and the root `npm run test:all` when root/v1 functionality changes. Test actual Chromium downloads and resulting files; do not rely only on mocked messages.
+V2 uses Python 3.9+, Playwright, Beautiful Soup and HTTPX. Keep browser discovery, caption conversion, transport and export separate. Run `.venv/bin/python -m pytest -q` from v2 for v2 changes, and the root `npm run test:all` for changes that affect both components. Test actual Chromium downloads and resulting files; do not rely only on mocked messages.
 
 Do not guess proprietary Panopto JSON schemas or endpoints. Preserve unknown integrations as explicit limitations. Never save cookies, passwords, storage state, full page HTML or raw network dumps. Browser contexts must remain ephemeral. Signed resource URLs belong only in bounded session memory and must not enter manifests, logs or subprocess arguments. FFmpeg receives local files only. Reject DRM/encryption, redirects to login and unsupported layouts. Keep incomplete caption snapshots clearly labelled. Never claim Lancaster compatibility based on fictional fixtures.
 

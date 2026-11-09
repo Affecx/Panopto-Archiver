@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 from pathlib import Path
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from threading import Thread
@@ -15,7 +14,7 @@ from panopto_archiver.exporter import export_archive
 
 
 @pytest.fixture
-def server():
+def server(hls_media):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
@@ -40,9 +39,8 @@ def server():
                 '/blocked': ('text/html', b'<html>Sign in</html>'),
                 '/master.m3u8': ('application/vnd.apple.mpegurl', b'#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nvideo.m3u8'),
             }
-            media = Path(os.environ.get('V2_TEST_MEDIA', '/nonexistent'))
-            if path.startswith('/media/'):
-                file = media / Path(path).name
+            if hls_media is not None and path.startswith('/media/'):
+                file = hls_media / Path(path).name
                 if file.exists():
                     routes[path] = ('application/vnd.apple.mpegurl' if file.suffix == '.m3u8' else 'video/mp2t', file.read_bytes())
             if path == '/opaque-audio' and 'session=fictional' not in self.headers.get('Cookie', ''):
@@ -90,10 +88,10 @@ async def test_real_browser_discovery_and_exports(server, tmp_path):
             await transport.close(); await context.close(); await browser.close()
 
 
-async def test_assembled_video_decodes(server, tmp_path):
-    ffmpeg, ffprobe = os.environ.get('FFMPEG_PATH'), os.environ.get('FFPROBE_PATH')
-    if not ffmpeg or not ffprobe or not os.environ.get('V2_TEST_MEDIA'):
-        pytest.skip('Set FFMPEG_PATH, FFPROBE_PATH and V2_TEST_MEDIA for real video decode validation')
+async def test_assembled_video_decodes(server, tmp_path, av_tools, hls_media):
+    ffmpeg, ffprobe = av_tools
+    if hls_media is None:
+        pytest.skip('FFmpeg and FFprobe are required for video decode validation')
     from panopto_archiver.models import Resource
     async with async_playwright() as p:
         browser = await p.chromium.launch(); context = await browser.new_context()

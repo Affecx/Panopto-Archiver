@@ -1,5 +1,5 @@
 """Fictional audiovisual frames; never a tenant schema."""
-import json, os, subprocess
+import json, subprocess
 from pathlib import Path
 import pytest
 from panopto_archiver.learning_media import prepare, local
@@ -14,8 +14,8 @@ def test_reference_path_confinement_and_missing_media(tmp_path):
     with pytest.raises(ValueError): local(tmp_path,'../escape')
 
 
-def test_real_reference_frames_and_probe(tmp_path):
-    ffmpeg,ffprobe=os.environ.get('FFMPEG_PATH'),os.environ.get('FFPROBE_PATH')
+def test_real_reference_frames_and_probe(tmp_path, av_tools):
+    ffmpeg, ffprobe = av_tools
     if not ffmpeg or not ffprobe: pytest.skip('Configured audiovisual test binaries required')
     (tmp_path/'metadata').mkdir();(tmp_path/'media').mkdir()
     video=tmp_path/'media/fictional.mp4'

@@ -1,6 +1,6 @@
 # Panopto Archiver v2
 
-A new local Python application, independent of the v1 WXT extension. Playwright controls a real Chromium browser; Beautiful Soup parses the HTML **after JavaScript rendering**; HTTPX streams resource downloads; Python's ZIP64 support packages large archives from disk. The program does not connect to your existing browser profile or export its authentication state.
+Panopto Archiver v2 is a local Python application. Playwright controls a real Chromium browser; Beautiful Soup parses the HTML **after JavaScript rendering**; HTTPX streams resource downloads; Python's ZIP64 support packages large archives from disk. The browser starts with its own profile. The Obsidian helper can reuse an opt-in session stored in the OS keychain.
 
 Beautiful Soup alone cannot execute Panopto's player JavaScript. The browser is needed to render captions, discover iframe/shadow-root content and observe actual response content types. The response observer can recognise `text/vtt` or `audio/mp4` even when the endpoint has no `.vtt` or `.m4a` extension.
 
@@ -41,7 +41,7 @@ Enter the lecture URL at the prompt. Sign in **yourself in the opened Chromium t
 - Generic `data-start` chapter/text snapshots, clearly marked as snapshots rather than a verified complete Panopto timeline.
 - HLS master audio/video renditions as separate exports. Automatic separate-track muxing is not implemented. Segmented WebVTT, fMP4, live, byte-range/discontinuous streams, DASH and encrypted HLS remain unsupported.
 
-Unlike v1's URL-extension filter, the browser observer also checks MIME types. It does **not** invent Panopto caption API endpoints or parse unknown JSON into guessed transcripts. The inspection manifest counts unparsed JSON responses to make this limitation visible. A future tenant adapter needs a verified anonymised response contract. A new stack does not by itself establish compatibility with Lancaster's proprietary transcript responses.
+The browser observer checks MIME types as well as file extensions. It does **not** invent Panopto caption API endpoints or parse unknown JSON into guessed transcripts. The inspection manifest counts unparsed JSON responses to make this limitation visible. A future tenant adapter needs a verified anonymised response contract. A new stack does not by itself establish compatibility with Lancaster's proprietary transcript responses.
 
 ## Video and ZIP output
 
@@ -70,39 +70,15 @@ cd v2
 
 Browser tests start a local fictional HTTP server and launch real Chromium. They verify iframe/shadow-root discovery, captions exposed by an opaque endpoint, browser cues, cookie-authenticated audio, unknown-JSON reporting, actual ZIP bytes and URL/auth redaction. Unit tests cover MIME classification, filenames, caption timestamps, HLS restrictions and partial-file cleanup.
 
-An additional real-video test requires `FFMPEG_PATH`, `FFPROBE_PATH` and `V2_TEST_MEDIA` (a directory containing an unencrypted generated `video.m3u8` and its TS segments). It assembles video, remuxes MP4, probes both audio/video and fully decodes the output. The repository's existing `node mock/generate-media.mjs` can generate fictional media if its v1 dev dependencies are installed; v2 runtime does not depend on Node. The decode test explicitly skips when these optional validation tools are absent.
+Install FFmpeg with H.264 encoding support and FFprobe for the audiovisual checks. The suite creates a fictional HLS recording in a temporary directory, assembles it, remuxes it to MP4 and decodes both audio and video. The learning media check also generates and decodes a reference image. Use `FFMPEG_PATH` and `FFPROBE_PATH` to select explicit executables. These checks skip when the required tools are unavailable.
 
-Documentation sources: [Playwright browser network events](https://playwright.dev/python/docs/network), [Beautiful Soup](https://www.crummy.com/software/BeautifulSoup/bs4/doc/), [HTTPX streaming](https://www.python-httpx.org/async/).
-
-## Verification in this workspace — 2 November 2026
-
-The earlier dependency-download blocker is resolved. The editable v2 package, Beautiful Soup, HTTPX, pytest and Python Playwright are installed in `v2/.venv`; Playwright Chromium is installed too. `pip check` reports no broken requirements.
-
-Executed verification:
-
-- **33 v2 tests passed, no skips**, including both real Chromium tests and the dependency-free component tests. The run set `FFMPEG_PATH`, `FFPROBE_PATH` and `V2_TEST_MEDIA` to the generated fictional media and local test binaries, so both audiovisual decode tests actually ran. Latest duration: 7.13 seconds.
-- A separate **actual CLI smoke test passed** against the fictional embedded lecture. It ran `python -m panopto_archiver` headlessly, returned exit code 0, and produced a ZIP containing cookie-authenticated audio, the expected transcript text and a redacted resource manifest.
-- The retained **v1 `npm run test:all` passed** strict typechecking, 53 unit tests, the production extension build and all 13 installed-extension Chromium scenarios.
-
-To repeat the full configured v2 run from the repository root on this Mac, after installing v1 dev dependencies:
-
-```sh
-node mock/generate-media.mjs
-FFMPEG_PATH="$PWD/node_modules/@ffmpeg-installer/darwin-arm64/ffmpeg" \
-FFPROBE_PATH="$PWD/node_modules/@ffprobe-installer/darwin-arm64/ffprobe" \
-V2_TEST_MEDIA="$PWD/mock/media" \
-v2/.venv/bin/python -m pytest -q -c v2/pyproject.toml v2/tests
-```
-
-On other platforms use your installed FFmpeg/FFprobe paths. Without these variables the optional real-video checks skip; that is not the fully configured run reported above.
-
-V2 is now ready to launch with `./v2/run.command` from the repository root. Sign in yourself in its fresh browser. Authenticated rendered-caption capture was verified for the supplied Lancaster software-development lecture (492 excerpts, 0:03–47:09), but snapshot completeness and general tenant compatibility remain unverified. Unknown proprietary JSON caption responses still need a verified adapter. Mock-browser and decode tests do not establish tenant compatibility.
+Authenticated browser testing used rendered caption snapshots from Lancaster. Caption completeness and general tenant compatibility require verification on the target recording. The browser tests use fictional recordings.
 
 ## Obsidian helper
 
 The desktop plugin in `../obsidian-plugin` uses `python -m panopto_archiver.bridge`, a private JSON-lines stdin/stdout protocol. Lecture URLs arrive over stdin rather than process arguments; raw exception details, cookies and session state are not printed. Browser-session persistence is opt-in and uses an OS-backed keyring only (`session_store.py`); the ordinary CLI remains nonpersistent. The helper emits sign-in/progress/result events. With `autoPrepare: true` it detects the requested player after sign-in and prepares playback/captions without a Continue decision. Older clients retain their explicit Continue handshake. A restored session does not bypass university MFA, expiry or export policy. See the plugin README for setup, secret storage and model-provider limitations.
 
-The helper accepts an optional resource-kind filter. The study plugin defaults to captions-only and skips HLS media inspection in that mode; full-media export remains selectable. Opt-in remembered sessions are captured after page/caption loading, with regression coverage using fake keychain storage. Real university keychain persistence still needs verification.
+The helper accepts an optional resource-kind filter. For a captions-only import, turn off **Download videos and attachments too**. The helper skips HLS media inspection in that mode. Opt-in remembered sessions are captured after page/caption loading, with regression coverage using fake keychain storage. Real university keychain persistence still needs verification.
 
 ## Independent local caption check
 
@@ -119,9 +95,3 @@ v2/.venv/bin/python -m panopto_archiver.verify_captions \
 Evidence is the benchmark's cleaned JSON list of `id`, `text` and `source` (ending in an observed ` · m:ss` or ` · h:mm:ss` label). Do not invent timestamps. The default is `mlx-community/whisper-small.en-mlx`, English, temperature zero, word timestamps, no caption prompt and no previous-text conditioning. The check writes mono 16 kHz PCM, independent ASR JSON, cached run metadata, JSON metrics and a Markdown review report. Keep these private source-bearing outputs outside version control. A matching PCM/evidence/model/version cache avoids repeated ASR; it does not certify model accuracy.
 
 The report uses minimum word-level Levenshtein alignment and lowercase/punctuation normalization, retaining fillers and number spellings. It reports exact aligned-word agreement, word disagreement with Whisper as the explicit reference, cue-start timing offsets, one-minute windows and large discrepancies. Neither side is a human ground truth: a disagreement can be an error in either transcript. Whisper can hallucinate and technical C terms can be misheard; low-confidence segments need review. Caption timestamps identify cue starts rather than exact word times. A silent video feed or material beyond the chosen audio track is not verified. The check does not overwrite the captured captions or regenerate study notes automatically. See [MLX Whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) and the [Whisper model limitations](https://github.com/openai/whisper/blob/main/model-card.md).
-
-## Player preparation verification — 4 November 2026
-
-`player.py` is independent of discovery/export and acts only in the requested origin/session's Viewer/Embed frame. Five minutes are allowed for interactive sign-in. No password, MFA, login-form or guessed tenant API automation is used. It selects visible unique semantic controls, including verified title-only Play controls, and leaves already-selected captions enabled. Starting playback does not authorize exports. The live Lancaster player was inspected and its Play/Captions actions were verified through automated native UI interaction; the shipped helper was independently exercised in fictional Chromium sessions. This does not establish compatibility with other tenant layouts.
-
-The fully configured v2 suite now passes **37 tests** (9.40 seconds), including delayed sign-in/popup detection, real browser playback state, idempotent caption preparation, rejection of wrong-session controls and actual captions exported by automatic helper mode. Existing cancellation and audiovisual decode tests remain. The transcript benchmark capture also uses the shared automatic preparation helper.
