@@ -1,0 +1,9 @@
+{
+  "id": "panopto-study",
+  "name": "Panopto Study",
+  "version": "0.1.0",
+  "minAppVersion": "1.11.4",
+  "description": "Import authorised Panopto lectures and create source-grounded study notes with Codex or Ollama.",
+  "author": "Panopto Archiver",
+  "isDesktopOnly": true
+}

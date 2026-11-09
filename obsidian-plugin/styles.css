@@ -1,0 +1,15 @@
+.panopto-study-progress {
+  white-space: pre-wrap;
+  padding: 12px;
+  background: var(--background-secondary);
+  border-radius: 8px;
+  margin: 12px 0;
+}
+.panopto-study-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.panopto-study-url {
+  width: 100%;
+}

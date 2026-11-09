@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "panopto-archiver-v2"
+version = "2.0.0"
+description = "Local browser-driven lecture archiver"
+requires-python = ">=3.9"
+dependencies = ["playwright>=1.40", "beautifulsoup4>=4.12", "httpx>=0.27", "keyring>=24"]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "pytest-asyncio>=0.24", "rapidfuzz>=3"]
+verify = ["mlx-whisper==0.4.3; platform_system == 'Darwin' and platform_machine == 'arm64'", "rapidfuzz>=3"]
+
+[project.scripts]
+panopto-archive = "panopto_archiver.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["panopto_archiver*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

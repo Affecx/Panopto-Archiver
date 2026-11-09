@@ -1,0 +1,24 @@
+{
+  "name": "panopto-study-obsidian",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:all": "npm run typecheck && npm test && npm run build",
+    "test:local": "node scripts/live-local.mjs",
+    "test:codex": "node scripts/live-codex.mjs",
+    "package": "npm run build && python3 scripts/package.py",
+    "benchmark": "node scripts/compare.mjs",
+    "learning:page": "node scripts/learning-page.mjs"
+  },
+  "devDependencies": {
+    "obsidian": "latest",
+    "esbuild": "latest",
+    "typescript": "latest",
+    "@types/node": "latest",
+    "vitest": "latest"
+  }
+}

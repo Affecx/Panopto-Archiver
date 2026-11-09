@@ -1,0 +1,8 @@
+node_modules
+.wxt
+.output
+mock/media
+test-results
+playwright-report
+
+v2/.venv

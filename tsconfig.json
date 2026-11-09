@@ -1,0 +1,11 @@
+{
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "types": ["node", "vitest/globals", "vite/client"],
+    "jsx": "react-jsx"
+  },
+  "include": ["**/*.ts", "**/*.tsx", ".wxt/**/*.d.ts"],
+  "exclude": ["node_modules", ".output", "mock/media", "v2", "obsidian-plugin"]
+}
