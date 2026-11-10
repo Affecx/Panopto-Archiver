@@ -42,7 +42,6 @@ import { folderReferences, folderSources } from "./folder-study";
 import {
   macroSchema,
   planMacroTask,
-  readMacroContext,
   applyMacroPlan,
   type Macro,
 } from "./macros";
@@ -623,11 +622,6 @@ export default class PanoptoStudy extends Plugin {
   async runMacro(selected: string, isFolder: boolean, macro: Macro) {
     const { root, adapter } = await this.contextRoot();
     const scope = contextScope(selected, isFolder, macro.includeParent);
-    const context = await readMacroContext(
-      root,
-      scope,
-      this.settings.maxInputBytes,
-    );
     const chat = this.modelChat([], undefined, macroSchema);
     const providerDescription = this.providerDescription;
     if (
@@ -639,21 +633,20 @@ export default class PanoptoStudy extends Plugin {
             macro.name +
             ". Scope: " +
             (scope.file || scope.folder || "Vault root") +
-            ".",
+            ". The macro starts with paths and reads individual files as needed.",
           resolve,
-          context.map((file) => file.path),
+          [],
           "Run macro",
         ).open(),
       ))
     )
       return;
     new Notice("Running AI macro…");
-    const plan = await planMacroTask({
+    const result = await planMacroTask({
       root,
       scope,
       selection: { path: selected, type: isFolder ? "folder" : "file" },
       prompt: macro.prompt,
-      files: context,
       limit: this.settings.maxInputBytes,
       chat,
       approve: (requests) =>
@@ -666,15 +659,16 @@ export default class PanoptoStudy extends Plugin {
           ).open(),
         ),
     });
-    if (!plan) return;
+    if (!result) return;
+    const { plan, files } = result;
     const apply = await new Promise<boolean>((resolve) =>
-      new MacroReview(this.app, plan, context, resolve).open(),
+      new MacroReview(this.app, plan, files, resolve).open(),
     );
     if (!apply) return;
     const count = await applyMacroPlan(
       root,
       plan,
-      context,
+      files,
       async (relative, update) => {
         const file = this.app.vault.getFileByPath(relative);
         return file

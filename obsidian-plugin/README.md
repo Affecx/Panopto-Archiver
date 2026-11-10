@@ -38,9 +38,9 @@ The plugin saves the page in the selected folder’s `learning/` directory and o
 
 In **Settings → Panopto Study → Macros**, choose **Add macro** and enter a name and prompt. Select whether a macro launched on a file uses that file alone or its containing folder. Launching a macro on a folder uses that folder and its subfolders.
 
-Right-click a file or folder and choose **AI macros…**. Review the initial sources and the proposed edits. File scope can replace the selected text file. Folder scope can replace text files in its starting context or create files in existing subfolders. The plugin checks paths and file changes before writing. Macros work with regular UTF-8 files and exclude hidden paths, symbolic links and common credential files.
+Right-click a file or folder and choose **AI macros…**. Review the starting scope and the proposed edits. The model starts with a directory listing or a selected file path. It can browse subfolders and read individual files within that scope. It can release file contents to make room for other reads. Each request stays within **Maximum AI context bytes**. File scope can replace the selected text file. Folder scope can replace text files in its starting context or create files in existing subfolders. The plugin checks paths and file changes before writing. Macros work with regular UTF-8 files and exclude hidden paths, symbolic links and common credential files.
 
-A macro can pause to request specific vault files or folders and explain why it needs them. You can share selected paths, continue without sharing, or cancel. Approved context is read-only for that run. Write approvals apply to the starting scope. Each macro can request additional context twice within the context size limit.
+A macro can pause to request specific vault files or folders and explain why it needs them. You can share selected paths, continue without sharing, or cancel. An approved folder lets the macro browse its subfolders and read individual files. Approved context is read-only for that run. Write approvals apply to the starting scope. A run can make up to ten rounds of browsing and reading requests. A file must fit in the available context to be read.
 
 ## Tests and development
 

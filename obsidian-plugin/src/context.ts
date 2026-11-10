@@ -46,6 +46,27 @@ export async function existingPath(root: string, relative: string) {
   return target;
 }
 
+export async function listContextDirectory(root: string, folder: string) {
+  const entries = await readdir(await existingPath(root, folder), {
+    withFileTypes: true,
+  });
+  return entries
+    .filter((entry) => {
+      if (!entry.isDirectory() && !entry.isFile()) return false;
+      try {
+        contextPath(folder ? folder + "/" + entry.name : entry.name);
+        return true;
+      } catch {
+        return false;
+      }
+    })
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((entry) => ({
+      name: entry.name,
+      kind: entry.isDirectory() ? "folder" : "file",
+    }));
+}
+
 export async function contextFiles(
   root: string,
   scope: ContextScope,

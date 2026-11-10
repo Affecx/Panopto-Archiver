@@ -10,13 +10,16 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { contextScope } from "../src/context";
+import {
+  contextScope,
+  readContextText,
+  type ContextFile,
+} from "../src/context";
 import { folderReferences, folderSources } from "../src/folder-study";
 import { exportLearningPage } from "../src/learning-export";
 import {
   applyMacroPlan,
   planMacroTask,
-  readMacroContext,
   validateMacroPlan,
 } from "../src/macros";
 import { generateStudy, type Study } from "../src/study";
@@ -178,14 +181,15 @@ it("limits macro reads and writes to the selected file or folder and refuses sta
     const single = contextScope("Topic/Notes.md", false, false);
     const folder = contextScope("Topic/Notes.md", false, true);
     expect(contextScope("Topic", true, false)).toEqual(folder);
-    expect(await readMacroContext(root, single, 10000)).toEqual([
-      { path: "Topic/Notes.md", text: "Original" },
-    ]);
-    const snapshot = await readMacroContext(root, folder, 10000);
-    expect(snapshot.map((file) => file.path)).toEqual([
-      "Topic/Notes.md",
-      "Topic/sub/Lesson.py",
-    ]);
+    const snapshot = await Promise.all(
+      ["Topic/Notes.md", "Topic/sub/Lesson.py"].map(async (path) => ({
+        path,
+        text: (await readContextText(root, path, 10000))!,
+      })),
+    );
+    expect(
+      await readContextText(root, "Topic/asset.png", 10000),
+    ).toBeUndefined();
     const proposal = (
       target: string,
       action: "create" | "replace",
@@ -263,7 +267,6 @@ it("shares only approved wider context on subsequent turns and keeps the origina
     await writeFile(path.join(root, extra), "Text before approval");
     await writeFile(path.join(root, declined), "Declined text");
     const scope = contextScope(original, false, false);
-    const files = await readMacroContext(root, scope, 10000);
     const response = (edits: unknown[] = [], contextRequests: unknown[] = []) =>
       JSON.stringify({ summary: "Test", edits, contextRequests });
     const request = (path: string, kind: "file" | "folder" = "file") => ({
@@ -275,17 +278,16 @@ it("shares only approved wider context on subsequent turns and keeps the origina
     const options: Parameters<typeof planMacroTask>[0] = {
       root,
       scope,
-      files,
       limit: 10000,
       prompt: "Revise the draft.",
       selection: { path: original, type: "file" },
       chat: async (_system, input) => {
         calls++;
         const data = JSON.parse(input);
-        expect(data.files).toEqual(files);
         expect(input).not.toContain("Declined text");
         if (calls === 1) {
-          expect(data.additionalFiles).toBeUndefined();
+          expect(data.files).toEqual([]);
+          expect(data.tree).toEqual([]);
           expect(data.canRequestContext).toBe(true);
           return response(
             [],
@@ -296,12 +298,25 @@ it("shares only approved wider context on subsequent turns and keeps the origina
             ],
           );
         }
-        expect(data.additionalFiles).toEqual([
+        if (calls === 2) {
+          expect(data.files).toEqual([]);
+          expect(data.tree).toEqual([
+            {
+              path: "Course/Week2",
+              offset: 0,
+              nextOffset: null,
+              entries: [{ name: "Reference.md", kind: "file" }],
+            },
+          ]);
+          expect(data.contextDecisions).toEqual([
+            { path: "Course/Week2", status: "listed" },
+            { path: declined, status: "declined" },
+          ]);
+          return response([], [request(extra), request(original)]);
+        }
+        expect(data.files).toEqual([
           { path: extra, text: "Text after approval" },
-        ]);
-        expect(data.contextDecisions).toEqual([
-          { path: "Course/Week2", status: "added" },
-          { path: declined, status: "declined" },
+          { path: original, text: "Draft" },
         ]);
         return response([
           { path: original, action: "replace", text: "Revised" },
@@ -317,11 +332,12 @@ it("shares only approved wider context on subsequent turns and keeps the origina
       },
     };
     const plan = await planMacroTask(options);
-    expect(plan?.edits).toEqual([
+    expect(plan?.plan.edits).toEqual([
       { path: original, action: "replace", text: "Revised" },
     ]);
     expect(await readFile(path.join(root, original), "utf8")).toBe("Draft");
-    expect(calls).toBe(2);
+    expect(plan?.files).toEqual([{ path: original, text: "Draft" }]);
+    expect(calls).toBe(3);
 
     let turns = 0;
     await expect(
@@ -348,4 +364,126 @@ it("shares only approved wider context on subsequent turns and keeps the origina
       }),
     ).resolves.toBeUndefined();
     expect(turns).toBe(1);
+  }));
+
+it("browses a folder above the input budget and reads only the files the model selects", async () =>
+  withVault(async (root) => {
+    const folder = "Course";
+    await mkdir(path.join(root, folder, "Notes"), { recursive: true });
+    await mkdir(path.join(root, "Outside"));
+    const put = (relative: string, text: string) =>
+      writeFile(path.join(root, folder, relative), text);
+    await Promise.all(
+      Array.from({ length: 50 }, (_, index) =>
+        put(
+          `Log-${String(index).padStart(2, "0")}.md`,
+          "Unrelated " + "x".repeat(5000),
+        ),
+      ),
+    );
+    await put(".private", "Hidden");
+    await symlink(
+      path.join(root, "Outside"),
+      path.join(root, folder, "linked"),
+    );
+    const first = "Course/Notes/Background.md";
+    const target = "Course/Notes/Target.md";
+    const background = "Relevant background " + "x".repeat(3200);
+    const original = "Original target " + "y".repeat(3200);
+    await put("Notes/Background.md", background);
+    await put("Notes/Target.md", original);
+
+    const request = (
+      path: string,
+      kind: "folder" | "file",
+      offset?: number,
+    ) => ({ path, kind, offset, reason: "Find the relevant source" });
+    type BrowseInput = {
+      files: ContextFile[];
+      tree: {
+        offset: number;
+        nextOffset: number | null;
+        entries: { name: string; kind: string }[];
+      }[];
+      workingNotes?: string;
+    };
+    const steps = [
+      (data: BrowseInput) => {
+        expect(data.files).toEqual([]);
+        expect(data.tree[0]!.entries).toHaveLength(24);
+        return {
+          contextRequests: [
+            request(folder, "folder", data.tree[0]!.nextOffset ?? undefined),
+          ],
+        };
+      },
+      (data: BrowseInput) => {
+        expect(data.tree[0]!.offset).toBe(24);
+        return {
+          contextRequests: [
+            request(folder, "folder", data.tree[0]!.nextOffset ?? undefined),
+          ],
+        };
+      },
+      (data: BrowseInput) => {
+        expect(data.tree[0]!.entries).toContainEqual({
+          name: "Notes",
+          kind: "folder",
+        });
+        expect(data.tree[0]!.entries).not.toContainEqual({
+          name: "linked",
+          kind: "folder",
+        });
+        return { contextRequests: [request("Course/Notes", "folder")] };
+      },
+      (data: BrowseInput) => {
+        expect(data.tree.at(-1)!.entries).toEqual([
+          { name: "Background.md", kind: "file" },
+          { name: "Target.md", kind: "file" },
+        ]);
+        expect(data.files).toEqual([]);
+        return { contextRequests: [request(first, "file")] };
+      },
+      (data: BrowseInput) => {
+        expect(data.files).toEqual([{ path: first, text: background }]);
+        return {
+          contextRequests: [request(target, "file")],
+          workingNotes: "Keep the main conclusion from the background.",
+          releaseFiles: [first],
+        };
+      },
+      (data: BrowseInput) => {
+        expect(data.files).toEqual([{ path: target, text: original }]);
+        expect(data.workingNotes).toContain("main conclusion");
+        return {
+          edits: [{ path: target, action: "replace", text: "Revised" }],
+        };
+      },
+    ];
+    const result = await planMacroTask({
+      root,
+      scope: { folder },
+      selection: { path: folder, type: "folder" },
+      prompt: "Revise the target note using the background.",
+      limit: 5000,
+      approve: async () => {
+        throw new Error("In-scope requests need no further approval");
+      },
+      chat: async (_system, input) => {
+        expect(Buffer.byteLength(input)).toBeLessThanOrEqual(5000);
+        expect(input).not.toContain("Unrelated");
+        const step = steps.shift()!;
+        return JSON.stringify({
+          summary: "Test",
+          edits: [],
+          contextRequests: [],
+          ...step(JSON.parse(input)),
+        });
+      },
+    });
+    expect(steps).toHaveLength(0);
+    expect(result?.plan.edits).toEqual([
+      { path: target, action: "replace", text: "Revised" },
+    ]);
+    expect(result?.files).toEqual([{ path: target, text: original }]);
   }));

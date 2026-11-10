@@ -115,8 +115,9 @@ export class MacroContextReview extends Modal {
       new Setting(el)
         .setName(request.path)
         .setDesc(
-          (request.kind === "folder" ? "Folder and subfolders. " : "File. ") +
-            request.reason,
+          (request.kind === "folder"
+            ? "Browse this folder and read selected files beneath it. "
+            : "Read this file. ") + request.reason,
         )
         .addToggle((toggle) =>
           toggle.onChange((value) => {
@@ -159,7 +160,7 @@ export function renderMacroSettings(
 ) {
   el.createEl("h2", { text: "Macros" });
   el.createEl("p", {
-    text: "Run saved prompts from the file or folder context menu. Folder scopes include subfolders. Review the files before sending them to the model and review the proposed changes before applying them.",
+    text: "Run saved prompts from the file or folder context menu. The model browses paths and reads files as needed. Review the starting scope and any requests for wider access.",
   });
   for (const macro of macros) {
     new Setting(el)
