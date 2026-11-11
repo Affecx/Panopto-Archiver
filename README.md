@@ -15,7 +15,7 @@ npm --prefix obsidian-plugin ci
 npm --prefix obsidian-plugin run package
 ```
 
-Extract `obsidian-plugin/dist/panopto-study.zip` into your vault’s `.obsidian/plugins/` folder, enable **Panopto Study**, and set its **Python executable** to the absolute path of `v2/.venv/bin/python`. Choose Codex or Ollama in the plugin settings.
+Extract `obsidian-plugin/dist/panopto-study.zip` into your vault’s `.obsidian/plugins/` folder, enable **Panopto Study**, and set its **Python executable** to the absolute path of `v2/.venv/bin/python`. Choose Codex, Claude CLI or Ollama in the plugin settings.
 
 For the full test suite, install FFmpeg with H.264 encoding support and FFprobe, then run:
 

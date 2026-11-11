@@ -31,6 +31,7 @@ it("loads the actual CommonJS build and registers plugin commands without a mode
     registerEvent() {}
     async loadData() {
       return {
+        provider: "claude",
         macros: [
           {
             name: "Fixture",
@@ -65,7 +66,12 @@ it("loads the actual CommonJS build and registers plugin commands without a mode
     FileSystemAdapter: class {},
   };
   const module = {
-    exports: {} as { default?: new () => { onload: () => Promise<void> } },
+    exports: {} as {
+      default?: new () => {
+        onload: () => Promise<void>;
+        settings: { provider: string };
+      };
+    },
   };
   const context = vm.createContext({
     module,
@@ -87,6 +93,7 @@ it("loads the actual CommonJS build and registers plugin commands without a mode
   expect(Constructor).toBeTypeOf("function");
   const plugin = new Constructor!();
   await plugin.onload();
+  expect(plugin.settings.provider).toBe("claude");
   expect(commands).toEqual([expect.objectContaining({ id: "import-lecture" })]);
   expect(settings).toHaveLength(1);
   const titles: string[] = [];

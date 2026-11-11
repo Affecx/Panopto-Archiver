@@ -16,6 +16,7 @@ Extract `obsidian-plugin/dist/panopto-study.zip` into `<vault>/.obsidian/plugins
 Choose a model provider in **Settings → Panopto Study**:
 
 - **Codex (ChatGPT sign-in)** uses a locally installed Codex CLI. Sign in with `codex login`, then set **Codex executable** to its absolute path. Your signed-in account receives the text approved for generation.
+- **Claude CLI** uses a locally installed Claude Code executable and its existing Claude account sign-in. Run `claude auth login`, then set **Claude executable** and optionally **Claude model**. It supports lecture imports, folder worksheets and macros. Live Claude execution is unverified. The adapter follows the [Claude Code CLI contract](https://code.claude.com/docs/en/cli-reference) and requires support for safe mode, JSON schemas and disabled session persistence.
 - **Local Ollama** uses a loopback endpoint and a model already installed on your machine. Set **Ollama endpoint** and **Local model**. **Local Ollama output token cap** controls the generation limit.
 
 **Maximum AI context bytes** limits the input size. This setting measures bytes. Model token use varies.

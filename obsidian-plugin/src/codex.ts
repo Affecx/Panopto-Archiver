@@ -10,6 +10,11 @@ export type CommandRunner = (
   args: string[],
   stdin: string,
   cwd: string,
+  options?: {
+    provider: string;
+    env: NodeJS.ProcessEnv;
+    signIn?: boolean;
+  },
 ) => Promise<{ stdout: string; stderr: string }>;
 export function codexEnvironment(
   source: NodeJS.ProcessEnv = process.env,
@@ -64,11 +69,11 @@ export function codexArgs(
     "-",
   ];
 }
-export const runCommand: CommandRunner = (binary, args, stdin, cwd) =>
+export const runCommand: CommandRunner = (binary, args, stdin, cwd, options) =>
   new Promise((resolve, reject) => {
     const child = spawn(binary, args, {
       cwd,
-      env: codexEnvironment(),
+      env: options?.env ?? codexEnvironment(),
       shell: false,
       stdio: "pipe",
       windowsHide: true,
@@ -91,11 +96,14 @@ export const runCommand: CommandRunner = (binary, args, stdin, cwd) =>
       }
       reject(
         new Error(
-          `Codex could not finish (${args[0] === "login" ? "sign-in check" : "generation"}; received events: ${JSON.stringify(events)}). Check CLI access and usage limits. No automatic retry was made.`,
+          `${options?.provider ?? "Codex"} could not finish (${options?.signIn || args[0] === "login" ? "sign-in check" : "generation"}; received events: ${JSON.stringify(events)}). Check CLI access and usage limits. No automatic retry was made.`,
         ),
       );
     };
-    const timer = setTimeout(fail, args[0] === "login" ? 30000 : 300000);
+    const timer = setTimeout(
+      fail,
+      options?.signIn || args[0] === "login" ? 30000 : 300000,
+    );
     child.on("error", fail);
     child.stdout.on("data", (chunk: Buffer) => {
       stdout += chunk.toString();

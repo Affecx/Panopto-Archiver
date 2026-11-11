@@ -30,6 +30,7 @@ import {
 } from "./study";
 import { ollamaChat, type Usage } from "./model";
 import { codexChat } from "./codex";
+import { claudeChat } from "./claude";
 import { mergeTranscripts } from "./transcripts";
 import {
   selectedSidebarFolder,
@@ -55,11 +56,13 @@ interface Settings {
   python: string;
   notesFolder: string;
   sourceFolder: string;
-  provider: "ollama" | "codex";
+  provider: "ollama" | "codex" | "claude";
   endpoint: string;
   localModel: string;
   codexModel: string;
   codexPath: string;
+  claudePath: string;
+  claudeModel: string;
   rememberLogin: boolean;
   sessionName: string;
   maxInputBytes: number;
@@ -77,6 +80,8 @@ const defaults: Settings = {
   localModel: "",
   codexModel: "",
   codexPath: "codex",
+  claudePath: "claude",
+  claudeModel: "",
   rememberLogin: false,
   sessionName: "panopto-study",
   maxInputBytes: 80000,
@@ -119,7 +124,10 @@ export default class PanoptoStudy extends Plugin {
     this.settings = {
       ...defaults,
       ...clean,
-      provider: clean.provider === "ollama" ? "ollama" : "codex",
+      provider:
+        clean.provider === "ollama" || clean.provider === "claude"
+          ? clean.provider
+          : "codex",
       macros: Array.isArray(clean.macros)
         ? clean.macros.filter(
             (macro) =>
@@ -258,12 +266,7 @@ export default class PanoptoStudy extends Plugin {
       throw new Error(
         "No transcript was captured. Source files are kept; enable captions and retry.",
       );
-    const model =
-      this.settings.provider === "ollama"
-        ? this.settings.localModel
-        : this.settings.codexModel;
-    if (this.settings.provider === "ollama" && !model)
-      throw new Error("Set a local model name in plugin settings first");
+    const model = this.modelName;
     const totalBytes = merged.cleanBytes;
     if (totalBytes > this.settings.maxInputBytes)
       throw new Error(
@@ -271,9 +274,9 @@ export default class PanoptoStudy extends Plugin {
       );
     const requestCount = chunks(
       evidence,
-      this.settings.provider === "codex" ? this.settings.maxInputBytes : 10000,
+      this.settings.provider === "ollama" ? 10000 : this.settings.maxInputBytes,
     ).length;
-    const info = `At most ${requestCount} generation requests before cache hits. Provider: ${this.settings.provider}. Model: ${model || "Codex default"}. Cleaned source: ${totalBytes} UTF-8 bytes in ${evidence.length} excerpts. ${this.settings.provider === "codex" ? "Transcript excerpts will be processed through your signed-in Codex CLI. Account usage limits apply; this integration cannot impose a hard output-token or spending cap. No API key is used." : `Text goes to the loopback model only. Output cap: ${this.settings.maxOutputTokens} tokens per request.`}`;
+    const info = `At most ${requestCount} generation requests before cache hits. Provider: ${this.settings.provider}. Model: ${model || `${this.settings.provider} default`}. Cleaned source: ${totalBytes} UTF-8 bytes in ${evidence.length} excerpts. ${this.providerDescription} ${this.settings.provider === "ollama" ? `Output cap: ${this.settings.maxOutputTokens} tokens per request.` : "CLI account usage limits apply."}`;
     if (!(await approve(info))) return;
     const usage: Usage[] = [];
     const chat = this.modelChat(usage, cancelled);
@@ -363,9 +366,9 @@ export default class PanoptoStudy extends Plugin {
             );
           },
         },
-        this.settings.provider === "codex"
-          ? this.settings.maxInputBytes
-          : 10000,
+        this.settings.provider === "ollama"
+          ? 10000
+          : this.settings.maxInputBytes,
         interactive,
       );
       await this.app.vault.adapter.write(
@@ -396,7 +399,7 @@ export default class PanoptoStudy extends Plugin {
         JSON.stringify(
           {
             provider: this.settings.provider,
-            model: model || "Codex default",
+            model: model || `${this.settings.provider} default`,
             usage,
             fromCache: usage.length === 0,
           },
@@ -474,7 +477,9 @@ export default class PanoptoStudy extends Plugin {
     const model =
       this.settings.provider === "ollama"
         ? this.settings.localModel
-        : this.settings.codexModel;
+        : this.settings.provider === "claude"
+          ? this.settings.claudeModel
+          : this.settings.codexModel;
     if (this.settings.provider === "ollama" && !model.trim())
       throw new Error("Set a local model name in plugin settings first");
     return model;
@@ -510,6 +515,14 @@ export default class PanoptoStudy extends Plugin {
         );
       }
     };
+    if (this.settings.provider === "claude")
+      return claudeChat(
+        this.settings.claudePath,
+        model,
+        (u) => usage.push(u),
+        undefined,
+        schemaFor,
+      );
     return this.settings.provider === "ollama"
       ? ollamaChat(
           this.settings.endpoint,
@@ -552,9 +565,9 @@ export default class PanoptoStudy extends Plugin {
   }
 
   private get providerDescription() {
-    return this.settings.provider === "codex"
-      ? "These files will be sent to your signed-in Codex account."
-      : "These files will be sent to your local Ollama model.";
+    return this.settings.provider === "ollama"
+      ? "These files will be sent to your local Ollama model."
+      : `These files will be sent through your signed-in ${this.settings.provider === "claude" ? "Claude" : "Codex"} CLI.`;
   }
 
   async createFolderPage(folder: string, name: string) {
@@ -590,7 +603,7 @@ export default class PanoptoStudy extends Plugin {
         new Notice(message);
       },
       undefined,
-      this.settings.provider === "codex" ? this.settings.maxInputBytes : 10000,
+      this.settings.provider === "ollama" ? 10000 : this.settings.maxInputBytes,
       true,
       true,
     );
@@ -1085,7 +1098,9 @@ class StudySettings extends PluginSettingTab {
         | "endpoint"
         | "localModel"
         | "codexModel"
-        | "codexPath",
+        | "codexPath"
+        | "claudePath"
+        | "claudeModel",
       desc: string,
     ) =>
       new Setting(el)
@@ -1127,9 +1142,10 @@ class StudySettings extends PluginSettingTab {
       d
         .addOption("ollama", "Local Ollama")
         .addOption("codex", "Codex (ChatGPT sign-in)")
+        .addOption("claude", "Claude CLI")
         .setValue(s.provider)
         .onChange(async (v) => {
-          s.provider = v === "codex" ? "codex" : "ollama";
+          s.provider = v === "claude" || v === "codex" ? v : "ollama";
           await this.plugin.save();
         }),
     );
@@ -1152,6 +1168,16 @@ class StudySettings extends PluginSettingTab {
       "Codex model (optional)",
       "codexModel",
       "Leave empty for the Codex CLI default. Uses ChatGPT sign-in, not an API key.",
+    );
+    text(
+      "Claude executable",
+      "claudePath",
+      "Absolute path to Claude Code. Sign in with claude auth login first.",
+    );
+    text(
+      "Claude model (optional)",
+      "claudeModel",
+      "Leave empty to use the Claude CLI default.",
     );
     new Setting(el)
       .setName("Maximum AI context bytes")
